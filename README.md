@@ -1,10 +1,16 @@
 # CISO.ai — focused Streamlit implementation
 
-Version 2 expands the same Streamlit app and its single workflow: enter or import 1–5 sanitized findings and business context, generate one AI draft, review/edit it, assign owners/dates/status, filter the action overview, and export. You can download and restore the working session without a database. It does not modify the earlier CISO.ai application or import its database.
+Version 3 expands the same Streamlit app and its single workflow: enter or import 1–5 sanitized findings and business context, generate one AI draft, review/edit it, assign owners/dates/status, filter the action overview, and export. You can download and restore the working session without a database. It does not modify the earlier CISO.ai application or import its database.
 
 ## Upgrade your existing working app
 
-Stop Streamlit with Ctrl+C. Copy the new code files and `tests/` from this package into your existing app folder, including the new `session_io.py`. Replace `.streamlit/config.toml` and `.streamlit/secrets.toml.example`. Keep your existing `.streamlit/secrets.toml` and `.venv` folder; the package contains no real key. Keep the exact Gemini model that worked for your project. Restart using `start-windows.ps1`.
+Stop Streamlit with Ctrl+C. Copy the new code files and `tests/` from this package into your existing app folder, including `session_io.py`, the new `word_export.py`, and the `assets/` folder. Replace `requirements.txt` too; the launcher installs the new Word dependency. Replace `.streamlit/config.toml` and `.streamlit/secrets.toml.example`. Keep your existing `.streamlit/secrets.toml` and `.venv` folder; the package contains no real key. Keep the exact Gemini model that worked for your project. Restart using `start-windows.ps1`.
+
+## Logo and Word download
+
+The supplied logo is included unchanged at `assets/logo.png` and appears on a dark background in the sidebar, app header and Word report. Keep `assets/` in GitHub alongside the code. Paths resolve relative to the code, so the image works on Streamlit Cloud too.
+
+After confirming review, select **Download action plan · Word**. The `.docx` contains the logo, business context, model/review timestamps, an action overview, and each finding’s observed issue, priority rationale, edited action, verification, assumptions, owner, target date and status. It contains every reviewed action regardless of overview filters. Export uses `python-docx` in memory without another AI request; no Word installation is needed on the server. Word files are product outputs, not automatically approved academic submission content.
 
 ## New workflow controls
 
@@ -65,6 +71,7 @@ No login, multiple roles, database, collectors, chat page, compliance certificat
 | --- | --- |
 | `app.py` | Input, consent, session state, review and export interface |
 | `core.py` | Input/output validation, finding references, privacy reminders and CSV escaping |
+| `word_export.py` | In-memory branded Word report using the reviewed plan |
 | `session_io.py` | Bounded CSV/JSON parsing, draft restoration, tracking validation and filtering |
 | `ai_client.py` | One fixed Google Gemini endpoint, prompt/schema, timeout/error handling and process call counter |
 | `tests/` | Synthetic software fixtures and automated checks; not customer-research evidence |

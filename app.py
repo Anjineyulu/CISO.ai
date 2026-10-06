@@ -1,5 +1,7 @@
 """CISO.ai course edition: one user, one workflow, one AI capability."""
 import copy
+import base64
+from pathlib import Path
 from datetime import date, datetime, timezone
 import json
 import os
@@ -10,6 +12,7 @@ from core import (CRITICALITIES, EXPOSURES, PRIORITIES, SEVERITIES, ValidationEr
                   export_csv, fingerprint, privacy_flags, validate_input, validate_plan)
 from session_io import (CSV_FIELDS, STATUSES, action_rows, csv_template, default_tracking,
                         make_session, parse_csv, parse_session, validate_tracking)
+from word_export import export_docx
 
 st.set_page_config(page_title='CISO.ai | Remediation planner', page_icon='🛡️', layout='wide')
 
@@ -28,6 +31,15 @@ def budget():
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
+
+
+def brand_logo(width):
+    logo = Path(__file__).resolve().parent / 'assets' / 'logo.png'
+    if logo.is_file():
+        encoded = base64.b64encode(logo.read_bytes()).decode('ascii')
+        st.markdown(f'<div style="background:#13263c;border-radius:12px;padding:12px 16px;margin-bottom:16px;max-width:{width}px"><img alt="CISO.ai Security Operating System" style="display:block;width:100%;height:auto" src="data:image/png;base64,{encoded}"></div>', unsafe_allow_html=True)
+    else:
+        st.markdown('**CISO.ai**')
 
 
 def reset_plan():
@@ -163,9 +175,10 @@ def review_plan(record):
     if reviewed and confirmed and reviewed['editor_fingerprint'] == edited_fingerprint:
         st.subheader('3 · Export your reviewed plan')
         st.caption('CSV includes all actions and assignments. JSON includes the input, original AI draft and reviewed version. Store downloads securely.')
-        x, y = st.columns(2)
+        x, y, z = st.columns(3)
         x.download_button('Download action plan · CSV', export_csv(reviewed), 'ciso-reviewed-actions.csv', 'text/csv', width='stretch')
         y.download_button('Download full record · JSON', json.dumps(reviewed, indent=2, ensure_ascii=False), 'ciso-reviewed-record.json', 'application/json', width='stretch')
+        z.download_button('Download action plan · Word', export_docx(reviewed), 'ciso-reviewed-action-plan.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', width='stretch')
     elif reviewed:
         st.info('The review or action assignments changed. Confirm again to refresh your export.')
 
@@ -178,8 +191,8 @@ div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {color:#17345
 </style>''', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.title('CISO.ai')
-    st.caption('REMEDIATION PLANNER · V2')
+    brand_logo(280)
+    st.caption('REMEDIATION PLANNER · V3')
     st.markdown('**1 · Describe**\n\nEnter or import findings.\n\n**2 · Review**\n\nEdit and assign actions.\n\n**3 · Export**\n\nDownload your reviewed plan.')
     st.divider()
     st.markdown('**Save and resume**')
@@ -191,6 +204,7 @@ with st.sidebar:
     st.button('Clear session data', on_click=clear_session, width='stretch')
     st.caption('No database or automatic saving. Downloads remain on your device; clearing cannot remove provider records.')
 
+brand_logo(430)
 st.caption('CISO.ai / SMB security operations')
 st.title('Turn findings into next steps.')
 st.write('Create a practical remediation draft, review the reasoning, and track the actions you choose.')
