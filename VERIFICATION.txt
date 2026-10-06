@@ -1,0 +1,31 @@
+CISO.ai course edition V2 — verification, 4 October 2026
+
+Environment: Linux, Python 3.12, Streamlit 1.65.0.
+29 automated unittest/Streamlit AppTest tests passed.
+V2 startup passed: /_stcore/health returned ok; / returned HTTP 200.
+
+Covered: original validation/AI failure/review/export tests; CSV header, encoding,
+quoted multiline text, enums and size/row limits; session round trips, partial
+inputs, original AI vs human edits, tracking, stale sessions, legacy full-record
+imports, unsupported versions, invalid dates/references, filter non-mutation,
+CSV formula escaping including owner aliases, upload handler rejection preserving
+work, review required after restore, assignment changes invalidating exports,
+and independent session state.
+
+AppTest cannot drive a browser file picker. Import integration tests seed the
+captured upload bytes and exercise the same import/restore button callbacks.
+Actual browser file selection and rendered visual layout were not tested here.
+
+Model responses were mocked; no API key was supplied to this environment.
+The user reported that the previous Gemini integration worked locally, but this
+V2 package has not been live-tested against their account. Also not verified:
+Windows execution, GitHub publication, Streamlit Cloud deployment, real-user
+research, or alignment with the unseen Phase 1 proposal.
+
+Use the existing working Gemini key/model privately. Run the app locally, import
+a CSV, generate one plan, edit its owner/date/status, filter the overview, confirm
+review, export, download a session, clear the session, restore, and review again.
+Then repeat on the deployed public URL. Session saving is manual, not a database.
+
+This AI-assisted technical verification record reports software checks only;
+it is not student-authored academic analysis or customer-research evidence.
