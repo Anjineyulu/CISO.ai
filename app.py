@@ -13,6 +13,8 @@ from core import (CRITICALITIES, EXPOSURES, PRIORITIES, SEVERITIES, ValidationEr
 from session_io import (CSV_FIELDS, STATUSES, action_rows, csv_template, default_tracking,
                         make_session, parse_csv, parse_session, validate_tracking)
 from word_export import export_docx
+from governance import (CATALOG, ASSESSMENTS, DECISIONS, NOTICE, ALIGNMENT_NOTICE,
+                        NIST_SOURCE, CIS_SOURCE, default_alignment, validate_alignment, create_signoff, current_signoff)
 
 st.set_page_config(page_title='CISO.ai | Remediation planner', page_icon='🛡️', layout='wide')
 
@@ -44,7 +46,7 @@ def brand_logo(width):
 
 def reset_plan():
     for key in list(st.session_state):
-        if key.startswith(('review_', 'track_')) or key in ('record', 'reviewed', 'confirmed', 'editor_cache', 'tracking', 'filter_priority', 'filter_status'):
+        if key.startswith(('review_', 'track_', 'align_', 'sign_')) or key in ('alignment', 'record', 'reviewed', 'confirmed', 'editor_cache', 'tracking', 'filter_priority', 'filter_status'):
             del st.session_state[key]
 
 
@@ -95,6 +97,7 @@ def apply_session(workspace):
         st.session_state['record'] = workspace['record']
         st.session_state['editor_cache'] = workspace['editor_plan']
         st.session_state['tracking'] = workspace['tracking']
+        st.session_state['alignment'] = workspace['alignment']
     st.session_state['confirmed'] = False
 
 
@@ -105,7 +108,7 @@ def restore_session():
             raise ValidationError('Choose a session JSON file first.')
         workspace = parse_session(uploaded)
         apply_session(workspace)
-        st.session_state['import_notice'] = ('success', 'Session restored as a draft. Check the data and confirm review again before exporting.')
+        st.session_state['import_notice'] = ('success', 'Session restored as a draft. Check the data and confirm review and sign off again before exporting a decision.')
     except (ValidationError, TypeError, KeyError, AttributeError, RecursionError) as exc:
         st.session_state['import_notice'] = ('error', str(exc) if isinstance(exc, ValidationError) else 'Invalid session file. Existing work was kept.')
 
@@ -119,6 +122,10 @@ def review_plan(record):
     cached = st.session_state.get('editor_cache', record['original_ai_plan'])
     tracking = st.session_state.get('tracking', default_tracking(cached))
     original = {row['finding_id']: row for row in record['original_ai_plan']['items']}
+    alignment = st.session_state.get('alignment', default_alignment(cached))
+    st.caption(ALIGNMENT_NOTICE)
+    st.markdown(f'[NIST CSF 2.0 source]({NIST_SOURCE}) · [CIS Controls v8.1 source]({CIS_SOURCE})')
+    edited_alignment = {}
     edited_items, edited_tracking = [], {}
     for item in cached['items']:
         fid = item['finding_id']
@@ -139,10 +146,18 @@ def review_plan(record):
             target = b.date_input('Target date (optional)', value=saved_date, min_value=date(1900, 1, 1), max_value=date(2100, 12, 31), key=f'track_{fid}_date')
             status = c.selectbox('Action status', STATUSES, index=STATUSES.index(tracking[fid]['status']), key=f'track_{fid}_status')
             edited_tracking[fid] = dict(owner=owner, target_date=target.isoformat() if target else '', status=status)
+            with st.expander('Standards alignment · human review'):
+                saved = alignment[fid]
+                refs = st.multiselect('Applicable references', list(CATALOG), default=saved['references'], format_func=lambda r: f'{r} · {CATALOG[r]}', key=f'align_{fid}_refs')
+                assessment = st.selectbox('Alignment assessment', ASSESSMENTS, index=ASSESSMENTS.index(saved['assessment']), key=f'align_{fid}_assessment')
+                reason = st.text_area('Why these references apply', value=saved['rationale'], max_chars=1800, key=f'align_{fid}_reason')
+                evidence = st.text_area('Sanitized evidence reference or verification note', value=saved['evidence'], max_chars=1000, key=f'align_{fid}_evidence', help='Use aliases or document IDs. Do not paste confidential evidence or credentials.')
+                edited_alignment[fid] = dict(references=refs, assessment=assessment, rationale=reason, evidence=evidence)
             edited_items.append(edited)
     edited_plan = {'items': edited_items}
     st.session_state['editor_cache'] = edited_plan
     st.session_state['tracking'] = edited_tracking
+    st.session_state['alignment'] = edited_alignment
     st.markdown('**Action overview**')
     left, middle, right = st.columns(3)
     left.metric('Actions', len(edited_items))
@@ -157,23 +172,49 @@ def review_plan(record):
         st.dataframe(visible, hide_index=True, width='stretch')
     else:
         st.info('No actions match these filters. Clear a filter to see more.')
-    edited_fingerprint = fingerprint({'plan': edited_plan, 'tracking': edited_tracking})
+    edited_fingerprint = fingerprint({'plan': edited_plan, 'tracking': edited_tracking, 'alignment': edited_alignment})
     confirmed = st.checkbox('I have reviewed all priorities, actions, assignments and assumptions, including operational impact.', key='confirmed')
+    previous = st.session_state.get('reviewed')
+    if previous and (not confirmed or previous['editor_fingerprint'] != edited_fingerprint):
+        previous.pop('signoff', None)
     if st.button('Confirm review and prepare export', type='primary'):
         try:
             if not confirmed:
                 raise ValidationError('Confirm that you reviewed the draft first.')
             accepted = validate_plan(edited_plan, record['input'])
             checked_tracking = validate_tracking(edited_tracking, accepted)
+            checked_alignment = validate_alignment(edited_alignment, accepted, final=True)
             st.session_state['reviewed'] = dict(
-                **copy.deepcopy(record), reviewed_plan=accepted, tracking=checked_tracking, reviewed_at=utc_now(),
+                **copy.deepcopy(record), reviewed_plan=accepted, tracking=checked_tracking, alignment=checked_alignment, reviewed_at=utc_now(),
                 editor_fingerprint=edited_fingerprint, status='Human-reviewed AI draft; not a security certification')
             st.success('Review recorded for this session. Your downloads are ready below.')
         except ValidationError as exc:
             st.error(str(exc))
     reviewed = st.session_state.get('reviewed')
     if reviewed and confirmed and reviewed['editor_fingerprint'] == edited_fingerprint:
-        st.subheader('3 · Export your reviewed plan')
+        st.subheader('3 · CISO sign-off (optional)')
+        st.caption(NOTICE)
+        with st.form('signoff_form'):
+            name = st.text_input('Reviewer name or alias', max_chars=100, key='sign_name')
+            role = st.text_input('Reviewer role', value='CISO', max_chars=100, key='sign_role')
+            decision = st.selectbox('Decision', DECISIONS, key='sign_decision')
+            rationale = st.text_area('Decision rationale and conditions', max_chars=1800, key='sign_rationale')
+            attested = st.checkbox('I am authorized to record this decision and have reviewed the complete plan, assignments and standards mappings.', key='sign_attested')
+            if st.form_submit_button('Record CISO decision'):
+                try:
+                    reviewed['signoff'] = create_signoff(reviewed, name, role, decision, rationale, attested)
+                except ValidationError as exc:
+                    st.error(str(exc))
+        signoff = current_signoff(reviewed)
+        if signoff:
+            st.info(f"Recorded decision: {signoff['decision']} · {signoff['name']} · {signoff['signed_at']}")
+            st.caption('Any change to inputs, actions, tracking, alignment or review invalidates this decision. Downloads are editable records, not tamper-proof evidence.')
+            if st.button('Withdraw recorded decision'):
+                reviewed.pop('signoff', None)
+                st.rerun()
+        else:
+            st.info('Not signed off. You may export the reviewed plan without a CISO decision.')
+        st.subheader('4 · Export your reviewed plan')
         st.caption('CSV includes all actions and assignments. JSON includes the input, original AI draft and reviewed version. Store downloads securely.')
         x, y, z = st.columns(3)
         x.download_button('Download action plan · CSV', export_csv(reviewed), 'ciso-reviewed-actions.csv', 'text/csv', width='stretch')
@@ -192,8 +233,8 @@ div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {color:#17345
 
 with st.sidebar:
     brand_logo(280)
-    st.caption('REMEDIATION PLANNER · V3')
-    st.markdown('**1 · Describe**\n\nEnter or import findings.\n\n**2 · Review**\n\nEdit and assign actions.\n\n**3 · Export**\n\nDownload your reviewed plan.')
+    st.caption('REMEDIATION PLANNER · V4')
+    st.markdown('**1 · Describe**\n\nEnter or import findings.\n\n**2 · Review**\n\nEdit and assign actions.\n\n**3 · Sign off**\n\nRecord a CISO decision.\n\n**4 · Export**\n\nDownload your reviewed plan.')
     st.divider()
     st.markdown('**Save and resume**')
     session_download = st.empty()
@@ -220,7 +261,7 @@ if not configured:
     st.warning('Gemini is not configured. Add GEMINI_API_KEY to .streamlit/secrets.toml locally, or to Settings → Secrets in Streamlit Cloud, then restart. Do not put the key in GitHub.')
 with st.expander('Data use and Gemini setup'):
     st.write('Replace real company names, hostnames and people with aliases. Never enter credentials, personal data, customer records or confidential evidence.')
-    st.write('Only the business context, constraints and findings are sent to Google Gemini when you generate a draft. Owners, dates and action statuses stay in the app session and your downloads.')
+    st.write('Only the business context, constraints and findings are sent to Google Gemini when you generate a draft. Owners, dates, action statuses, standards mappings and sign-off details stay in the app session and your downloads.')
     st.write('The app does not intentionally save inputs or plans to disk or a database. Hosting and provider policies still apply. Google’s free tier may use inputs and outputs to improve its products.')
     st.write('For model-not-found errors, set GEMINI_MODEL to the exact text-model identifier available to your AI Studio project. For quota errors, check AI Studio usage and wait for the quota to reset. The app never upgrades billing or switches models automatically.')
     st.link_button('Open Google AI Studio', 'https://aistudio.google.com/apikey')
@@ -287,11 +328,13 @@ if st.button('Generate remediation draft', type='primary', disabled=not configur
 record = st.session_state.get('record')
 if record:
     if payload is None or fingerprint(payload) != record['input_fingerprint']:
+        if st.session_state.get('reviewed'):
+            st.session_state['reviewed'].pop('signoff', None)
         st.warning('Your inputs changed. Generate a new draft before reviewing or exporting. Your previous edits remain available in a session download.')
     else:
         review_plan(record)
 try:
-    session = make_session(raw_input, record, st.session_state.get('editor_cache', record['original_ai_plan'] if record else None), st.session_state.get('tracking', default_tracking(record['original_ai_plan']) if record else {}))
+    session = make_session(raw_input, record, st.session_state.get('editor_cache', record['original_ai_plan'] if record else None), st.session_state.get('tracking', default_tracking(record['original_ai_plan']) if record else {}), st.session_state.get('alignment'))
     session_bytes = json.dumps(session, indent=2, ensure_ascii=False)
     parse_session(session_bytes.encode())  # Only offer reloadable snapshots.
     session_download.download_button('Download session · JSON', session_bytes, 'ciso-session.json', 'application/json', width='stretch')

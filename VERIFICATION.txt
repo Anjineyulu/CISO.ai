@@ -1,3 +1,23 @@
+CISO.ai V4 verification — 6 October 2026
+
+Linux / Python 3.12 / Streamlit 1.65.0 / python-docx 1.2.0.
+36 automated unittest and Streamlit AppTest checks passed.
+Added checks cover: mapping rationale and evidence requirements, unknown reference
+rejection, required sign-off fields and authority attestation, digest invalidation,
+permanent decision removal after input/alignment edits and reversal, filter
+non-invalidation, export of decision and mappings to Word/CSV, formula escaping,
+legacy session import, and discarding decisions on restoration.
+All previous 31 regression checks also passed.
+
+Word output is opened and inspected programmatically for content, embedded logo
+and XML correctness. V4 page layout was not rendered visually in this runtime.
+No live Gemini call, Windows execution or Streamlit Cloud deployment was performed
+for V4. The existing model integration is unchanged. This is not a compliance
+assessment or user-research evidence. Use the README acceptance check locally and
+after your deployment.
+
+Historical V3 verification follows for context; its visual checks are V3 only.
+
 CISO.ai course edition V3 — verification, 4 October 2026
 
 Environment: Linux, Python 3.12, Streamlit 1.65.0.

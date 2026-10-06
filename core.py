@@ -95,8 +95,10 @@ def csv_cell(value):
 
 
 def export_csv(record):
+    from governance import governance_columns
     stream = io.StringIO(newline='')
     fields = FIELDS + ['owner', 'target_date', 'action_status', 'review_status', 'model', 'generated_at', 'reviewed_at']
+    fields += list(governance_columns(record, record['reviewed_plan']['items'][0]['finding_id']))
     writer = csv.DictWriter(stream, fieldnames=fields)
     writer.writeheader()
     for row in record['reviewed_plan']['items']:
@@ -105,5 +107,6 @@ def export_csv(record):
                       action_status=tracking.get('status', 'Not started'),
                       review_status='Human-reviewed AI draft; not a security certification',
                       model=record['model'], generated_at=record['generated_at'], reviewed_at=record['reviewed_at'])
+        values.update(governance_columns(record, row['finding_id']))
         writer.writerow({key: csv_cell(value) for key, value in values.items()})
     return '\ufeff' + stream.getvalue()

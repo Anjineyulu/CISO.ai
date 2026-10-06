@@ -1,16 +1,36 @@
 # CISO.ai — focused Streamlit implementation
 
-Version 3 expands the same Streamlit app and its single workflow: enter or import 1–5 sanitized findings and business context, generate one AI draft, review/edit it, assign owners/dates/status, filter the action overview, and export. You can download and restore the working session without a database. It does not modify the earlier CISO.ai application or import its database.
+Version 4 expands the same Streamlit app and its single workflow: enter or import 1–5 sanitized findings and business context, generate one AI draft, review/edit it, assign owners/dates/status, filter the action overview, and export. You can download and restore the working session without a database. It does not modify the earlier CISO.ai application or import its database.
 
 ## Upgrade your existing working app
 
-Stop Streamlit with Ctrl+C. Copy the new code files and `tests/` from this package into your existing app folder, including `session_io.py`, the new `word_export.py`, and the `assets/` folder. Replace `requirements.txt` too; the launcher installs the new Word dependency. Replace `.streamlit/config.toml` and `.streamlit/secrets.toml.example`. Keep your existing `.streamlit/secrets.toml` and `.venv` folder; the package contains no real key. Keep the exact Gemini model that worked for your project. Restart using `start-windows.ps1`.
+Stop Streamlit with Ctrl+C. Copy the new code files and `tests/` from this package into your existing app folder, including `session_io.py`, `word_export.py`, the new `governance.py`, and the `assets/` folder. Replace `requirements.txt` too; the launcher installs the new Word dependency. Replace `.streamlit/config.toml` and `.streamlit/secrets.toml.example`. Keep your existing `.streamlit/secrets.toml` and `.venv` folder; the package contains no real key. Keep the exact Gemini model that worked for your project. Restart using `start-windows.ps1`.
 
 ## Logo and Word download
 
 The supplied logo is included unchanged at `assets/logo.png` and appears on a dark background in the sidebar, app header and Word report. Keep `assets/` in GitHub alongside the code. Paths resolve relative to the code, so the image works on Streamlit Cloud too.
 
 After confirming review, select **Download action plan · Word**. The `.docx` contains the logo, business context, model/review timestamps, an action overview, and each finding’s observed issue, priority rationale, edited action, verification, assumptions, owner, target date and status. It contains every reviewed action regardless of overview filters. Export uses `python-docx` in memory without another AI request; no Word installation is needed on the server. Word files are product outputs, not automatically approved academic submission content.
+
+## CISO sign-off and standards alignment (V4)
+
+After generation, each finding has a **Standards alignment · human review** panel. Select applicable references, record why they apply, choose an assessment and optionally add a sanitized evidence reference. Mapped references require a rationale before confirming review. **Evidence reviewed** also requires an evidence reference; this remains the user's declaration.
+
+The catalog includes all 22 NIST CSF 2.0 categories and five selected CIS Controls v8.1 controls (3, 6, 8, 11, 17). These are category/control-level references, not a complete safeguard assessment or official crosswalk. The app does not infer mappings, calculate compliance percentages, certify compliance or establish that a control is effective. Read the linked official guidance when choosing a reference. Unmapped actions can still be reviewed and exported.
+
+After confirming the review, the optional **CISO sign-off** form records a name or alias, role, Approve plan / Changes requested decision, rationale/conditions and UTC timestamp. An authority/review declaration is required. This is a self-declared decision: there is no authentication, verified identity, cryptographic signature, durable audit trail or certification. Anyone using the session can enter a reviewer name. A SHA-256 digest binds the decision to that exact input, original draft, reviewed plan, assignments, mappings and review metadata within the running app; it does not make exported files tamper-proof.
+
+Changing input, action text, tracking, alignment, unchecking review or confirming a fresh review invalidates the recorded decision. Reverting an edit does not recover it. Overview filters do not affect sign-off. **Withdraw recorded decision** removes it. CSV, Word and full-record JSON include current mappings and any recorded decision; unsigned Word/CSV exports explicitly say Not signed off. Changes requested does not block export: it labels the decision in the report.
+
+Session JSON preserves mapping drafts but intentionally does not preserve active sign-off. Restoring session or full-record JSON always requires fresh human review and a new decision. Older version-1 sessions remain supported. Save the full-record export if you need a copy of the recorded decision, and protect that file yourself. Signer details and mappings are not sent to Gemini and are not stored in a database.
+
+Quick acceptance check with your own sanitized findings:
+1. Generate a draft and expand one finding's alignment panel.
+2. Choose a reference; verify review is blocked until you explain the mapping.
+3. Confirm review, enter a reviewer, decision and rationale, attest, then record the decision.
+4. Download Word, CSV and JSON and check the decision and references.
+5. Edit a mapping or action: the decision must disappear; reconfirm review and record it again.
+6. Restore a saved file: mappings return, but prior sign-off is not accepted.
 
 ## New workflow controls
 
@@ -71,6 +91,7 @@ No login, multiple roles, database, collectors, chat page, compliance certificat
 | --- | --- |
 | `app.py` | Input, consent, session state, review and export interface |
 | `core.py` | Input/output validation, finding references, privacy reminders and CSV escaping |
+| `governance.py` | Curated reference catalog, mapping validation and decision binding |
 | `word_export.py` | In-memory branded Word report using the reviewed plan |
 | `session_io.py` | Bounded CSV/JSON parsing, draft restoration, tracking validation and filtering |
 | `ai_client.py` | One fixed Google Gemini endpoint, prompt/schema, timeout/error handling and process call counter |
@@ -116,3 +137,13 @@ No PRD, slide deck, customer research, personas, hypothesis evidence, roadmap, c
 - https://ai.google.dev/gemini-api/docs/generate-content/structured-output
 
 Gemini free-tier eligibility, quotas and model availability may change. Check https://ai.google.dev/gemini-api/docs/pricing and your AI Studio project. Using a paid project can incur charges. If migrating from the previous package, replace the old OPENAI settings with GEMINI settings; the app does not reuse an OpenAI key.
+
+Standards reference sources (catalog checked 6 October 2026):
+- https://www.nist.gov/cyberframework
+- https://www.nist.gov/document/nist-csf-20-core-withdrawn-csf-11-elements (Table 1: active CSF 2.0 categories only)
+- https://www.cisecurity.org/controls/v8-1
+- https://cas.docs.cisecurity.org/en/latest/source/Controls3/
+- https://cas.docs.cisecurity.org/en/latest/source/Controls6/
+- https://cas.docs.cisecurity.org/en/latest/source/Controls8/
+- https://cas.docs.cisecurity.org/en/latest/source/Controls11/
+- https://cas.docs.cisecurity.org/en/latest/source/Controls17/

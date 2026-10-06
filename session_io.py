@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from core import (CRITICALITIES, EXPOSURES, SEVERITIES, ValidationError, clean_text,
                   fingerprint, validate_input, validate_plan)
 
+from governance import default_alignment, validate_alignment
+
 CSV_FIELDS = ['asset', 'observation', 'severity', 'exposure', 'criticality']
 STATUSES = ['Not started', 'In progress', 'Blocked', 'Completed']
 MAX_FILE_BYTES = 500_000
@@ -113,11 +115,12 @@ def validate_record(record):
                 provenance='Imported draft: origin and prior review are not independently verified')
 
 
-def make_session(raw, record=None, editor_plan=None, tracking=None):
-    return {'format': 'ciso.ai-session', 'version': 1,
+def make_session(raw, record=None, editor_plan=None, tracking=None, alignment=None):
+    return {'format': 'ciso.ai-session', 'version': 2,
             'saved_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
             'input': validate_draft(raw), 'record': record,
-            'editor_plan': editor_plan, 'tracking': tracking or {}}
+            'editor_plan': editor_plan, 'tracking': tracking or {},
+            'alignment': alignment if alignment is not None else (default_alignment(editor_plan) if editor_plan else {})}
 
 
 def parse_session(data):
@@ -131,20 +134,23 @@ def parse_session(data):
         # Also accept full-record exports from the earlier edition, as unverified drafts.
         old_record = validate_record(obj)
         old_plan = validate_plan(obj['reviewed_plan'], old_record['input'])
-        obj = make_session(old_record['input'], old_record, old_plan, obj.get('tracking', default_tracking(old_plan)))
-    required = {'format', 'version', 'saved_at', 'input', 'record', 'editor_plan', 'tracking'}
-    if set(obj) != required or obj['format'] != 'ciso.ai-session' or type(obj['version']) is not int or obj['version'] != 1:
+        obj = make_session(old_record['input'], old_record, old_plan, obj.get('tracking', default_tracking(old_plan)), obj.get('alignment', default_alignment(old_plan)))
+    if obj.get('version') == 1 and type(obj.get('version')) is int and 'alignment' not in obj:
+        obj['alignment'] = default_alignment(obj['editor_plan']) if isinstance(obj.get('editor_plan'), dict) and isinstance(obj['editor_plan'].get('items'), list) else {}
+        obj['version'] = 2
+    required = {'alignment', 'format', 'version', 'saved_at', 'input', 'record', 'editor_plan', 'tracking'}
+    if set(obj) != required or obj['format'] != 'ciso.ai-session' or type(obj['version']) is not int or obj['version'] != 2:
         raise ValidationError('Unsupported session format or version. Use a CISO.ai session download.')
     result = make_session(validate_draft(obj['input']))
     result['saved_at'] = timestamp(obj['saved_at'])
     if obj['record'] is None:
-        if obj['editor_plan'] is not None or obj['tracking'] != {}:
+        if obj['editor_plan'] is not None or obj['tracking'] != {} or obj['alignment'] != {}:
             raise ValidationError('A session without an AI draft cannot contain reviewed actions.')
         return result
     record = validate_record(obj['record'])
     editor = validate_plan(obj['editor_plan'], record['input'])
     tracking = validate_tracking(obj['tracking'], editor)
-    result.update(record=record, editor_plan=editor, tracking=tracking)
+    result.update(record=record, editor_plan=editor, tracking=tracking, alignment=validate_alignment(obj['alignment'], editor))
     return result
 
 

@@ -11,6 +11,8 @@ from docx.oxml.ns import qn
 from core import validate_plan
 from session_io import validate_tracking, default_tracking
 
+from governance import current_signoff, default_alignment, CATALOG, NOTICE, ALIGNMENT_NOTICE, NIST_SOURCE, CIS_SOURCE
+
 LOGO = Path(__file__).resolve().parent / 'assets' / 'logo.png'
 
 
@@ -73,6 +75,17 @@ def export_docx(record):
     doc.add_heading('Business context', level=1)
     doc.add_paragraph(text(record['input']['business_context']))
     label_paragraph(doc, 'Operational constraints', record['input'].get('constraints', ''))
+    doc.add_heading('CISO decision', level=1)
+    doc.add_paragraph(NOTICE)
+    signoff = current_signoff(record)
+    if signoff:
+        for key, label in [('decision', 'Decision'), ('name', 'Reviewer'), ('role', 'Role'), ('rationale', 'Rationale and conditions'), ('signed_at', 'Recorded at'), ('record_digest', 'Reviewed record SHA-256')]:
+            label_paragraph(doc, label, signoff[key])
+    else:
+        doc.add_paragraph('Not signed off')
+    doc.add_heading('Standards alignment scope', level=1)
+    doc.add_paragraph(ALIGNMENT_NOTICE)
+    doc.add_paragraph('Sources: ' + NIST_SOURCE + ' ; ' + CIS_SOURCE)
     doc.add_heading('Action overview', level=1)
     table = doc.add_table(rows=1, cols=5)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -141,6 +154,12 @@ def export_docx(record):
                                ('verification', 'Verification steps'), ('uncertainty', 'Assumptions and unknowns')]:
             doc.add_heading(heading, level=2)
             doc.add_paragraph(text(item[field]))
+        mapping = record.get('alignment', default_alignment(plan))[fid]
+        doc.add_heading('Standards alignment · advisory', level=2)
+        label_paragraph(doc, 'References', '; '.join(f'{ref} — {CATALOG[ref]}' for ref in mapping['references']) or 'None selected')
+        label_paragraph(doc, 'Assessment', mapping['assessment'])
+        label_paragraph(doc, 'Mapping rationale', mapping['rationale'])
+        label_paragraph(doc, 'Evidence reference', mapping['evidence'])
     # A short page number supports longer reports without adding identifying data.
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
